@@ -69,6 +69,16 @@
        (zip/children) ;;lazy-seq of <r>..</r>
        (map extract-row-values)))
 
+;;
+;; build a row with the column name as a value
+;;
+(defn column-names-as-row [definitions]
+  (map (fn [def]
+         {:type :s
+          :column (:column def)
+          :value (:name def)
+          })       
+       definitions))
 
 (defn join-ref-data [definitions row]
   "Each cell with type :x contains a reference to a value in the corresponding column definition. The actual value is retrieved from the column defintion and merged with the cell"
@@ -99,10 +109,14 @@
       (doall (f inputstream)) ;; force evaluation before the file is closed
       )))
 
-(defn extract-pivot-data [xlsx-file def-file rec-file]
+(defn extract-pivot-data [xlsx-file def-file rec-file names?]
   (let [defs (process-zip-inputstream xlsx-file def-file extract-defs)
         rows (process-zip-inputstream xlsx-file rec-file extract-rows)]
-    (join-data-with-definitions defs rows)
+    (if names?
+      (cons
+       (column-names-as-row defs)
+       (join-data-with-definitions defs rows))
+      (join-data-with-definitions defs rows))
     )
   )
 
@@ -123,6 +137,7 @@
    ["-o" "--out OUT" "output file (csv)"]
    ["-d" "--defs DEFS" "definition filename, defaults to xl/pivotCache/pivotCacheDefinition1.xml" :default "xl/pivotCache/pivotCacheDefinition1.xml"]
    ["-r" "--recs ROWS" "records filename, defaults to xl/pivotCache/pivotCacheRecords1.xml" :default "xl/pivotCache/pivotCacheRecords1.xml"]
+   ["-n" "--names NAMES" "add the column names" :default true]
    ])
 
 (defn -main [& args]
@@ -130,10 +145,11 @@
         xlsx-file (:xlsx (:options options))
         defs-file (:defs (:options options))
         recs-file (:recs (:options options))
+        names?    (:names (:options options))
         out (:out (:options options))
         out* (if (nil? out) (default-output-name xlsx-file) out)
         ]
-    (-> (extract-pivot-data xlsx-file defs-file recs-file)
+    (-> (extract-pivot-data xlsx-file defs-file recs-file names?)
         (pivot-data-to-csv "^")
         (write-data out*))))
 
